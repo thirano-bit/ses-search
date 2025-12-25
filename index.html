@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>SES Search</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="background-glob"></div>
+
+    <header>
+        <div class="container header-content">
+            <div class="logo">
+                <i class="fa-solid fa-layer-group"></i>
+                <span>SES案件DB</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Search & Filter Section -->
+        <section class="search-section">
+            <div class="search-card">
+                <div class="filter-row-4col">
+                    <!-- Search Input -->
+                    <div class="filter-group">
+                        <label><i class="fa-solid fa-magnifying-glass"></i> キーワード</label>
+                        <input type="text" id="searchInput" placeholder="案件名, スキルなど">
+                    </div>
+
+                    <!-- Category Filter -->
+                    <div class="filter-group">
+                        <label><i class="fa-solid fa-layer-group"></i> 種別</label>
+                        <div id="categoryFilterContainer" class="checkbox-container">
+                            <!-- Checkboxes injected via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Contract Type Filter -->
+                    <div class="filter-group">
+                        <label><i class="fa-solid fa-briefcase"></i> 契約</label>
+                        <div id="contractFilterContainer" class="checkbox-container">
+                            <!-- Checkboxes injected via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Result Count -->
+                    <div class="filter-group result-count-group">
+                        <label><i class="fa-solid fa-list"></i> 件数</label>
+                        <div class="result-count-box">
+                            <span id="resultCount">0</span> / <span id="totalCount">0</span> 件
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- Results Section (Table Layout) -->
+        <section class="results-table-container">
+            <table class="project-table">
+                <thead>
+                    <tr>
+                        <th data-sort="category" width="100" class="sticky-col col-0">種別 / 状態</th>
+                        <th data-sort="title" width="280" class="sticky-col col-1">案件名 / 番号</th>
+                        <th data-sort="description" width="400">業務概要</th>
+                        <th data-sort="skills" width="400">スキル</th>
+                        <th data-sort="location" width="100">場所</th>
+                        <th data-sort="period" width="200">期間</th>
+                        <th data-sort="price" width="100">単価</th>
+                        <th data-sort="type" width="100">契約</th>
+                        <th data-sort="foreign" width="80">外国籍</th>
+                        <th data-sort="subcontract" width="80">再委託</th>
+                        <th data-sort="others" width="150">その他</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsContainer">
+                    <!-- Rows will be injected here -->
+                </tbody>
+            </table>
+
+            <!-- Loading State inside table structure -->
+            <div id="loadingState" class="loading-state">
+                <div class="spinner"></div>
+                <p>案件データを取得中...</p>
+            </div>
+
+            <!-- Fullscreen Button - fixed position -->
+            <button class="fullscreen-btn" onclick="toggleFullscreen()">
+                <i class="fa-solid fa-expand"></i> 全画面
+            </button>
+        </section>
+    </main>
+
+    <!-- Project Detail Modal -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <div id="modalBody">
+                <!-- Content injected via JS -->
+            </div>
+        </div>
+    </div>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
