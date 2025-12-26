@@ -300,11 +300,11 @@ function renderProjects(projects) {
         const copyTextEscaped = escapeHtml(project.copyText || '');
 
         tr.innerHTML = `
-            <td class="sticky-col col-0">
+            <td class="sticky-col col-0" data-label="種別">
                 ${escapeHtml(project.category)}
                 ${statusBadge}
             </td>
-            <td class="col-title sticky-col col-1">
+            <td class="col-title sticky-col col-1" data-label="案件名">
                 <div>${titleHtml}</div>
                 <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 400; margin-top: 2px;">${escapeHtml(project.id)}</div>
                 <div class="row-btn-group">
@@ -316,17 +316,17 @@ function renderProjects(projects) {
                     </button>
                 </div>
             </td>
-            <td class="col-skills">
+            <td class="col-skills" data-label="案件詳細">
                 ${descHtml}
             </td>
-            <td class="col-skills">${skillsHtml}</td>
-            <td>${escapeHtml(project.location)}</td>
-            <td>${escapeHtml(project.period)}</td>
-            <td class="col-price">${escapeHtml(project.price)}</td>
-            <td>${escapeHtml(project.type)}</td>
-            <td>${escapeHtml(project.foreign)}</td>
-            <td>${escapeHtml(project.subcontract)}</td>
-            <td>${escapeHtml(project.others)}</td>
+            <td class="col-skills" data-label="スキル">${skillsHtml}</td>
+            <td data-label="場所">${escapeHtml(project.location)}</td>
+            <td data-label="期間">${escapeHtml(project.period)}</td>
+            <td class="col-price" data-label="単価">${escapeHtml(project.price)}</td>
+            <td data-label="契約">${escapeHtml(project.type)}</td>
+            <td data-label="外国籍">${escapeHtml(project.foreign)}</td>
+            <td data-label="再委託">${escapeHtml(project.subcontract)}</td>
+            <td data-label="その他">${escapeHtml(project.others)}</td>
         `;
 
         tr.addEventListener('click', (e) => {
@@ -350,6 +350,9 @@ function renderProjects(projects) {
 
 // Apply sticky positioning to cells shorter than their row
 function applyDynamicSticky() {
+    // Skip on mobile screens where table might be cards
+    if (window.innerWidth <= 768) return;
+
     const rows = document.querySelectorAll('.project-table tbody tr');
     const headerHeight = 45; // Height of sticky header
 
