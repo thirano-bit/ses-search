@@ -326,7 +326,7 @@ function renderProjects(projects) {
             <td data-label="契約">${escapeHtml(project.type)}</td>
             <td data-label="外国籍">${escapeHtml(project.foreign)}</td>
             <td data-label="再委託">${escapeHtml(project.subcontract)}</td>
-            <td data-label="その他">${escapeHtml(project.others)}</td>
+            <td data-label="その他"><div class="col-scroll">${escapeHtml(project.others)}</div></td>
         `;
 
         tr.addEventListener('click', (e) => {
@@ -538,31 +538,33 @@ function openModal(project) {
         `).join('');
 
     body.innerHTML = `
-        ${navButtonsTop}
-        <div class="modal-header" style="position: relative;">
-            <button class="copy-detail-btn" onclick="copyProjectDetail()">
-                <i class="fa-solid fa-copy"></i> 詳細をコピー
-            </button>
-            ${statusHtml}
-            <div style="font-size:0.85rem; color:#94a3b8;">${escapeHtml(project.id)} / ${escapeHtml(project.category)}</div>
-            <h2 class="modal-title">${escapeHtml(project.title)}</h2>
-        </div>
+        <div class="modal-flex-container">
+            ${navButtonsTop}
+            <div class="modal-header modal-section-header" style="position: relative;">
+                <button class="copy-detail-btn" onclick="copyProjectDetail()">
+                    <i class="fa-solid fa-copy"></i> 詳細をコピー
+                </button>
+                ${statusHtml}
+                <div style="font-size:0.85rem; color:#94a3b8;">${escapeHtml(project.id)} / ${escapeHtml(project.category)}</div>
+                <h2 class="modal-title">${escapeHtml(project.title)}</h2>
+            </div>
 
-        <div class="info-grid info-grid-main">
-            ${allColumnsHtml}
-        </div>
+            <div class="info-grid info-grid-main modal-section-meta">
+                ${allColumnsHtml}
+            </div>
 
-        <div class="info-item">
-            <label><i class="fa-solid fa-code"></i> 必要スキル</label>
-            <div class="modal-description">${escapeHtml(project.skills)}</div>
-        </div>
+            <div class="info-item modal-section-skills">
+                <label><i class="fa-solid fa-code"></i> 必要スキル</label>
+                <div class="modal-description">${escapeHtml(project.skills)}</div>
+            </div>
 
-        <div class="info-item">
-            <label><i class="fa-solid fa-file-lines"></i> 案件詳細 / 業務内容</label>
-            <div class="modal-description">${escapeHtml(project.description)}</div>
+            <div class="info-item modal-section-desc">
+                <label><i class="fa-solid fa-file-lines"></i> 案件詳細 / 業務内容</label>
+                <div class="modal-description">${escapeHtml(project.description)}</div>
+            </div>
+            
+            ${navButtonsBottom}
         </div>
-        
-        ${navButtonsBottom}
         `;
 
     modal.style.display = "block";

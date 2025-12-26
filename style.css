@@ -562,6 +562,23 @@ header {
 .col-title {
     font-weight: 600;
     color: white;
+    white-space: normal !important;
+    min-width: 150px;
+}
+
+.col-scroll {
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.col-scroll::-webkit-scrollbar {
+    width: 4px;
+}
+
+.col-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
 }
 
 .col-price {
@@ -1021,9 +1038,43 @@ header {
         max-width: none;
     }
 
+    /* Modal Reordering for Mobile */
+    .modal-flex-container {
+        display: flex;
+        flex-direction: column;
+    }
+
     .modal-header-nav {
+        order: 0;
         padding: 0 10px;
         gap: 8px;
+    }
+
+    .modal-section-header {
+        order: 3;
+        /* Move title below skills of requested? User said skills at top */
+    }
+
+    .modal-section-meta {
+        order: 4;
+    }
+
+    .modal-section-skills {
+        order: 1;
+        margin-top: 10px;
+    }
+
+    .modal-section-desc {
+        order: 2;
+    }
+
+    .modal-nav-bottom {
+        order: 10;
+    }
+
+    /* Override info-item margins for reorder */
+    .info-item {
+        margin-bottom: 20px;
     }
 
     .modal-nav-btn {
