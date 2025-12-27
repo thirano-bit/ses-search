@@ -2,6 +2,9 @@ const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQY3X20AF
 
 let allProjects = [];
 
+// Favorites state (Set of IDs)
+let favorites = new Set();
+
 document.addEventListener('DOMContentLoaded', () => {
     if (window.location.protocol === 'file:') {
         console.warn("Running from file:// protocol.");
@@ -9,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchData();
     setupEventListeners();
     setupModal();
+    checkTourAutoStart();
 });
 
 // Toggle fullscreen mode for table
@@ -71,7 +75,10 @@ function fetchData() {
                 const totalSpan = document.getElementById('totalCount');
                 if (totalSpan) totalSpan.textContent = allProjects.length;
                 populateFilters(allProjects);
-                renderProjects(allProjects);
+                // Restore filter selections from localStorage
+                loadFilterState();
+                // Finally apply all filters (query + restored filters)
+                doFilter();
             } catch (e) {
                 console.error(e);
                 showError(`データ処理エラー: ${e.message}`);
@@ -205,15 +212,216 @@ function populateFilters(projects) {
     });
 }
 
+function resetAllSettings() {
+    if (confirm('すべての設定（検索条件、単価範囲、列の並び順、列の幅、お気に入り）をリセットしますか？')) {
+        localStorage.removeItem('ses_search_state');
+        localStorage.removeItem('ses_column_order');
+        localStorage.removeItem('ses_column_widths');
+        localStorage.removeItem('ses_favorites');
+        location.reload();
+    }
+}
+
 // Global Sort State
 let currentSort = {
     key: null,
     asc: true
 };
 
+// --- Dynamic Column Configuration ---
+let columnOrder = [
+    'category', 'title', 'description', 'skills', 'location',
+    'period', 'price', 'type', 'foreign', 'subcontract', 'others'
+];
+
+const COLUMNS = {
+    category: {
+        id: 'category',
+        label: '種別 / 状態',
+        width: 100,
+        sort: 'category',
+        // className removed, applied dynamically
+        render: (project) => {
+            let statusBadge = '';
+            if (project.status === '新規') {
+                statusBadge = '<span class="status-badge new">New</span>';
+            } else if (project.status) {
+                statusBadge = `<span class="status-badge">${escapeHtml(project.status)}</span>`;
+            }
+            return `${escapeHtml(project.category)} ${statusBadge}`;
+        }
+    },
+    title: {
+        id: 'title',
+        label: '案件名 / 番号',
+        width: 280,
+        sort: 'title',
+        className: 'col-title', // Keeps content styling, sticky removed
+        render: (project) => {
+            const titleHtml = highlightText(project.title, document.getElementById('searchInput')?.value.trim());
+            const copyTextEscaped = escapeHtml(project.copyText || '');
+            const isFav = favorites.has(project.id);
+
+            return `
+                <div class="title-container">
+                    <div class="title-main-group">
+                        <div>${titleHtml}</div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px; margin-bottom: 12px;">
+                            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 400;">${escapeHtml(project.id)}</div>
+                            <button class="copy-title-mini-btn" title="案件名コピー" data-title-copy="${escapeHtml(project.id)}｜${escapeHtml(project.title)}" onclick="copyTitleOnly(this, event)">
+                                <i class="fa-solid fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button class="fav-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite('${escapeHtml(project.id)}', this, event)" title="お気に入り">
+                        <i class="fa-${isFav ? 'solid' : 'regular'} fa-star"></i>
+                    </button>
+                </div>
+                <div class="project-meta-compact">
+                    <div><i class="fa-solid fa-yen-sign meta-icon"></i><span class="meta-label">単価</span>｜${escapeHtml(project.price)}</div>
+                    <div><i class="fa-solid fa-file-contract meta-icon"></i><span class="meta-label">契約</span>｜${escapeHtml(project.type)}</div>
+                    <div><i class="fa-solid fa-passport meta-icon"></i><span class="meta-label">外国籍</span>｜${escapeHtml(project.foreign)}</div>
+                    <div><i class="fa-solid fa-location-dot meta-icon"></i><span class="meta-label">場所</span>｜${escapeHtml(project.location)}</div>
+                </div>
+                <div class="row-btn-group">
+                    <button class="copy-row-btn" data-copytext="${copyTextEscaped}" onclick="copyRowDetail(this, event)">
+                        <i class="fa-solid fa-copy"></i> 詳細コピー
+                    </button>
+                    <button class="detail-row-btn" onclick="openModalFromRow(this, event)" data-project-index="${allProjects.indexOf(project)}">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i> 詳細を確認
+                    </button>
+                </div>
+            `;
+        }
+    },
+    description: {
+        id: 'description',
+        label: '業務概要',
+        width: 400,
+        sort: 'description',
+        className: 'col-skills',
+        render: (project) => {
+            const descHtml = highlightText(project.description, document.getElementById('searchInput')?.value.trim());
+            return `<div class="col-scroll">${descHtml}</div>`;
+        }
+    },
+    skills: {
+        id: 'skills',
+        label: 'スキル',
+        width: 400,
+        sort: 'skills',
+        className: 'col-skills',
+        render: (project) => {
+            const skillsHtml = highlightText(project.skills, document.getElementById('searchInput')?.value.trim());
+            return `<div class="col-scroll">${skillsHtml}</div>`;
+        }
+    },
+    location: {
+        id: 'location',
+        label: '場所',
+        width: 100,
+        sort: 'location',
+        render: (project) => escapeHtml(project.location)
+    },
+    period: {
+        id: 'period',
+        label: '期間',
+        width: 200,
+        sort: 'period',
+        render: (project) => escapeHtml(project.period)
+    },
+    price: {
+        id: 'price',
+        label: '単価',
+        width: 100,
+        sort: 'price',
+        className: 'col-price',
+        render: (project) => escapeHtml(project.price)
+    },
+    type: {
+        id: 'type',
+        label: '契約',
+        width: 100,
+        sort: 'type',
+        render: (project) => escapeHtml(project.type)
+    },
+    foreign: {
+        id: 'foreign',
+        label: '外国籍',
+        width: 80,
+        sort: 'foreign',
+        render: (project) => escapeHtml(project.foreign)
+    },
+    subcontract: {
+        id: 'subcontract',
+        label: '再委託',
+        width: 80,
+        sort: 'subcontract',
+        render: (project) => escapeHtml(project.subcontract)
+    },
+    others: {
+        id: 'others',
+        label: 'その他',
+        width: 150,
+        sort: 'others',
+        render: (project) => `<div class="col-scroll">${escapeHtml(project.others)}</div>`
+    }
+};
+
+function loadColumnOrder() {
+    const saved = localStorage.getItem('ses_column_order');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            // Verify all keys exist (in case of updates)
+            const validKeys = parsed.filter(key => COLUMNS[key]);
+            // Add any new keys that might be missing
+            const allKeys = Object.keys(COLUMNS);
+            const missing = allKeys.filter(key => !validKeys.includes(key));
+            columnOrder = [...validKeys, ...missing];
+        } catch (e) {
+            console.error('Failed to load column order', e);
+        }
+    }
+}
+
+function saveColumnOrder() {
+    localStorage.setItem('ses_column_order', JSON.stringify(columnOrder));
+}
+
+function loadColumnWidths() {
+    const saved = localStorage.getItem('ses_column_widths');
+    if (saved) {
+        try {
+            const widths = JSON.parse(saved);
+            Object.keys(widths).forEach(key => {
+                if (COLUMNS[key]) {
+                    COLUMNS[key].width = widths[key];
+                }
+            });
+        } catch (e) {
+            console.error('Failed to load column widths', e);
+        }
+    }
+}
+
+function saveColumnWidths() {
+    const widths = {};
+    Object.keys(COLUMNS).forEach(key => {
+        // COLUMNS object acts as source of truth after load/resize
+        widths[key] = COLUMNS[key].width;
+    });
+    localStorage.setItem('ses_column_widths', JSON.stringify(widths));
+}
 function handleSort(key) {
     if (currentSort.key === key) {
-        currentSort.asc = !currentSort.asc;
+        if (currentSort.asc) {
+            currentSort.asc = false;
+        } else {
+            // 3rd state: reset sort
+            currentSort.key = null;
+            currentSort.asc = true;
+        }
     } else {
         currentSort.key = key;
         currentSort.asc = true;
@@ -226,6 +434,104 @@ function handleSort(key) {
     if (searchInput) {
         searchInput.dispatchEvent(new Event('input')); // Re-trigger filter which calls render
     }
+}
+
+// --- Drag & Drop Header Helper ---
+function renderTableHeader() {
+    const theadRow = document.querySelector('.project-table thead tr');
+    if (!theadRow) return;
+
+    theadRow.innerHTML = '';
+
+    columnOrder.forEach((key, index) => {
+        const colDef = COLUMNS[key];
+        if (!colDef) return;
+
+        const th = document.createElement('th');
+        th.dataset.sort = colDef.sort;
+        th.style.width = colDef.width + 'px';
+
+        // Dynamic Sticky Classes
+        let classes = [];
+        if (colDef.className) classes.push(colDef.className);
+        if (index === 0) classes.push('sticky-col', 'col-0');
+        if (index === 1) classes.push('sticky-col', 'col-1');
+
+        if (classes.length > 0) th.className = classes.join(' ');
+
+        th.textContent = colDef.label;
+
+        // Add Bulk Favorite Toggle to Title Column
+        if (key === 'title') {
+            const allFavBtn = document.createElement('button');
+            allFavBtn.className = 'header-all-fav-btn';
+            const projects = window.currentFilteredProjects || [];
+            const isAllFav = projects.length > 0 && projects.every(p => favorites.has(p.id));
+
+            allFavBtn.innerHTML = `<i class="fa-${isAllFav ? 'solid' : 'regular'} fa-star"></i>`;
+            allFavBtn.dataset.tooltip = isAllFav ? '一括解除' : '一括登録';
+            allFavBtn.onclick = (e) => toggleAllFavorites(e);
+            th.appendChild(allFavBtn);
+        }
+
+        th.draggable = true;
+        th.dataset.colKey = key;
+
+        // Drag Events
+        th.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', index);
+            e.dataTransfer.effectAllowed = 'move';
+            th.classList.add('dragging');
+        });
+
+        th.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Allow drop
+            e.dataTransfer.dropEffect = 'move';
+            th.classList.add('drag-over');
+        });
+
+        th.addEventListener('dragleave', () => {
+            th.classList.remove('drag-over');
+        });
+
+        th.addEventListener('dragend', () => {
+            th.classList.remove('dragging');
+            document.querySelectorAll('th').forEach(h => h.classList.remove('drag-over'));
+        });
+        th.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+            const toIndex = index;
+
+            if (fromIndex !== toIndex) {
+                // Reorder array
+                const movedKey = columnOrder[fromIndex];
+                columnOrder.splice(fromIndex, 1);
+                columnOrder.splice(toIndex, 0, movedKey);
+
+                // Save and Re-render
+                saveColumnOrder();
+                renderTableHeader();
+                // Re-render body with new order
+                renderProjects(window.currentFilteredProjects || allProjects);
+                // Re-apply sort styling
+                updateSortHeaders();
+            }
+        });
+
+        // Click Sort Event
+        th.addEventListener('click', () => {
+            handleSort(colDef.sort);
+        });
+
+        theadRow.appendChild(th);
+    });
+
+    // Apply current sort style
+    updateSortHeaders();
+
+    // Re-enable resizing for new headers
+    enableColumnResizing();
 }
 
 function updateSortHeaders() {
@@ -286,48 +592,29 @@ function renderProjects(projects) {
     projects.forEach(project => {
         const tr = document.createElement('tr');
 
-        // Status Badge logic
-        const isNew = project.status && project.status.includes('新規');
-        // Badge is lighter/smaller for list view
-        const statusBadge = project.status ? `<span class="status-badge ${isNew ? 'new' : ''}" style="margin-left:6px; font-size:0.7rem; padding:1px 6px;">${escapeHtml(project.status)}</span>` : '';
+        // Generate cells based on dynamic column order
+        let rowHtml = '';
+        columnOrder.forEach((key, index) => {
+            const colDef = COLUMNS[key];
+            if (!colDef) return;
 
-        // Use highlight function for searchable fields
-        const titleHtml = highlightText(project.title, query);
-        const descHtml = highlightText(project.description, query);
-        const skillsHtml = highlightText(project.skills, query);
+            const content = colDef.render(project);
 
-        // Escape copyText for data attribute
-        const copyTextEscaped = escapeHtml(project.copyText || '');
+            // Dynamic Classes for Body Cells
+            let classes = [];
+            if (colDef.className) classes.push(colDef.className);
+            if (index === 0) classes.push('sticky-col', 'col-0');
+            if (index === 1) classes.push('sticky-col', 'col-1');
 
-        tr.innerHTML = `
-            <td class="sticky-col col-0" data-label="種別">
-                ${escapeHtml(project.category)}
-                ${statusBadge}
-            </td>
-            <td class="col-title sticky-col col-1" data-label="案件名">
-                <div>${titleHtml}</div>
-                <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 400; margin-top: 2px;">${escapeHtml(project.id)}</div>
-                <div class="row-btn-group">
-                    <button class="copy-row-btn" data-copytext="${copyTextEscaped}" onclick="copyRowDetail(this, event)">
-                        <i class="fa-solid fa-copy"></i> コピー
-                    </button>
-                    <button class="detail-row-btn" onclick="openModalFromRow(this, event)" data-project-index="${projects.indexOf(project)}">
-                        <i class="fa-solid fa-arrow-up-right-from-square"></i> 詳細
-                    </button>
-                </div>
-            </td>
-            <td class="col-skills" data-label="案件詳細">
-                ${descHtml}
-            </td>
-            <td class="col-skills" data-label="スキル">${skillsHtml}</td>
-            <td data-label="場所">${escapeHtml(project.location)}</td>
-            <td data-label="期間">${escapeHtml(project.period)}</td>
-            <td class="col-price" data-label="単価">${escapeHtml(project.price)}</td>
-            <td data-label="契約">${escapeHtml(project.type)}</td>
-            <td data-label="外国籍">${escapeHtml(project.foreign)}</td>
-            <td data-label="再委託">${escapeHtml(project.subcontract)}</td>
-            <td data-label="その他"><div class="col-scroll">${escapeHtml(project.others)}</div></td>
-        `;
+            const classAttr = classes.length > 0 ? `class="${classes.join(' ')}"` : '';
+
+            // Data-label for mobile view
+            const label = `data-label="${colDef.label.split(' / ')[0]}"`; // Simplify label for mobile
+
+            rowHtml += `<td ${classAttr} ${label}>${content}</td>`;
+        });
+
+        tr.innerHTML = rowHtml;
 
         tr.addEventListener('click', (e) => {
             // Check if text is selected; if so, don't open modal (UX improvement)
@@ -406,6 +693,7 @@ function enableColumnResizing() {
 
         const resizer = document.createElement('div');
         resizer.classList.add('resizer');
+        resizer.setAttribute('draggable', 'false'); // Prevent native drag
 
         // Prevent sorting when clicking resizer
         resizer.addEventListener('click', (e) => e.stopPropagation());
@@ -418,12 +706,17 @@ function enableColumnResizing() {
 function createResizableColumn(col, resizer) {
     let x = 0;
     let w = 0;
+    let currentWidth = 0;
 
     const mouseDownHandler = (e) => {
         e.stopPropagation(); // Stop sort
         x = e.clientX;
         const styles = window.getComputedStyle(col);
         w = parseInt(styles.width, 10);
+        currentWidth = w;
+
+        // Disable drag on column header during resize
+        if (col) col.setAttribute('draggable', 'false');
 
         document.addEventListener('mousemove', mouseMoveHandler);
         document.addEventListener('mouseup', mouseUpHandler);
@@ -433,15 +726,28 @@ function createResizableColumn(col, resizer) {
     const mouseMoveHandler = (e) => {
         const dx = e.clientX - x;
         // Allow Shrinking: Only limit is > 10px so it doesn't disappear
-        const newW = Math.max(10, w + dx);
-        col.style.width = `${newW}px`;
-        col.style.minWidth = `${newW}px`;
+        currentWidth = Math.max(10, w + dx);
+        col.style.width = `${currentWidth}px`;
+        col.style.minWidth = `${currentWidth}px`;
     };
 
     const mouseUpHandler = () => {
         document.removeEventListener('mousemove', mouseMoveHandler);
         document.removeEventListener('mouseup', mouseUpHandler);
         resizer.classList.remove('resizing');
+
+        // Update COLUMNS definition so it persists in memory
+        // Update COLUMNS definition so it persists in memory
+        const colKey = col.dataset.colKey;
+        if (colKey && COLUMNS[colKey]) {
+            COLUMNS[colKey].width = currentWidth;
+        }
+
+        // Save to localStorage
+        saveColumnWidths();
+
+        // Re-enable drag on column header
+        if (col) col.setAttribute('draggable', 'true');
     };
 
     resizer.addEventListener('mousedown', mouseDownHandler);
@@ -530,12 +836,16 @@ function openModal(project) {
             const keyLower = key.toLowerCase();
             return !excludeKeywords.some(exc => keyLower.includes(exc.toLowerCase()));
         })
-        .map(key => `
+        .map(key => {
+            const val = project.raw[key] || '';
+            const highlightedVal = highlightText(val, document.getElementById('searchInput')?.value.trim());
+            return `
             <div class="info-grid-item">
                 <label>${escapeHtml(key)}</label>
-                <p>${escapeHtml(project.raw[key])}</p>
+                <p>${highlightedVal}</p>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
     body.innerHTML = `
         <div class="modal-flex-container">
@@ -545,8 +855,8 @@ function openModal(project) {
                     <i class="fa-solid fa-copy"></i> 詳細をコピー
                 </button>
                 ${statusHtml}
-                <div style="font-size:0.85rem; color:#94a3b8;">${escapeHtml(project.id)} / ${escapeHtml(project.category)}</div>
-                <h2 class="modal-title">${escapeHtml(project.title)}</h2>
+                <div style="font-size:0.85rem; color:#94a3b8;">${highlightText(project.id, document.getElementById('searchInput')?.value.trim())} / ${highlightText(project.category, document.getElementById('searchInput')?.value.trim())}</div>
+                <h2 class="modal-title">${highlightText(project.title, document.getElementById('searchInput')?.value.trim())}</h2>
             </div>
 
             <div class="info-grid info-grid-main modal-section-meta">
@@ -555,12 +865,12 @@ function openModal(project) {
 
             <div class="info-item modal-section-skills">
                 <label><i class="fa-solid fa-code"></i> 必要スキル</label>
-                <div class="modal-description">${escapeHtml(project.skills)}</div>
+                <div class="modal-description">${highlightText(project.skills, document.getElementById('searchInput')?.value.trim())}</div>
             </div>
 
             <div class="info-item modal-section-desc">
                 <label><i class="fa-solid fa-file-lines"></i> 案件詳細 / 業務内容</label>
-                <div class="modal-description">${escapeHtml(project.description)}</div>
+                <div class="modal-description">${highlightText(project.description, document.getElementById('searchInput')?.value.trim())}</div>
             </div>
             
             ${navButtonsBottom}
@@ -576,6 +886,26 @@ function navigateModal(index) {
     if (index >= 0 && index < projects.length) {
         openModal(projects[index]);
     }
+}
+
+// Copy Project Title Only
+function copyTitleOnly(btn, event) {
+    if (event) event.stopPropagation();
+    const text = btn.dataset.titleCopy || '';
+    if (!text) return;
+
+    navigator.clipboard.writeText(text).then(() => {
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+        btn.classList.add('success');
+        setTimeout(() => {
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('success');
+        }, 1500);
+    }).catch(err => {
+        console.error('Copy failed', err);
+        alert('コピーに失敗しました');
+    });
 }
 
 // Copy R column text to clipboard
@@ -653,34 +983,71 @@ function highlightText(text, query) {
     if (!text) return '';
     if (!query) return escapeHtml(text);
 
-    const escaped = escapeHtml(text);
-    const escapedQuery = escapeHtml(query);
+    let escaped = escapeHtml(text);
 
-    // Case-insensitive replacement
-    const regex = new RegExp(`(${escapedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    return escaped.replace(regex, '<span class="highlight">$1</span>');
+    // Split query into keywords (support multiple space-separated words)
+    const keywords = query.trim().split(/\s+/).filter(k => k.length > 0);
+    if (keywords.length === 0) return escaped;
+
+    // To avoid nested highlighting or breaking HTML, we use a replacement trick
+    // Sort keywords by length descending to match longer strings first
+    keywords.sort((a, b) => b.length - a.length);
+
+    keywords.forEach(kw => {
+        const escapedKw = escapeHtml(kw);
+        const regex = new RegExp(`(${escapedKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        // We only replace if it's not already inside a highlight span
+        // Simple heuristic: only replace outside of tags
+        // This is still prone to issues with complex HTML, but for our "escaped" text + span, it's safer.
+        escaped = escaped.replace(regex, (match) => `<span class="highlight">${match}</span>`);
+    });
+
+    return escaped;
 }
 
 function setupEventListeners() {
-    // Initial resize setup for headers
-    enableColumnResizing();
+    // Initial resize setup for headers (might need update for dynamic headers or use simple CSS resize)
+    // enableColumnResizing(); // Removing legacy resize for now as it conflicts with drag/drop likely
+
+    // Load Favorites
+    loadFavorites();
+
+    // Load saved search state
+    loadFilterState();
+
+    // Load and Render Columns
+    loadColumnOrder();
+    loadColumnWidths(); // Apply saved widths
+    renderTableHeader();
 
     const searchInput = document.getElementById('searchInput');
 
     // Attach event listener to search input
     searchInput.addEventListener('input', () => doFilter());
 
-    // Sort handlers
-    const ths = document.querySelectorAll('th[data-sort]');
-    ths.forEach(th => {
-        th.addEventListener('click', () => {
-            handleSort(th.dataset.sort);
-        });
-    });
+    // Attach event listener to price filter
+    const priceFilter = document.getElementById('priceFilter');
+    if (priceFilter) {
+        priceFilter.addEventListener('change', doFilter);
+    }
+    const priceMaxFilter = document.getElementById('priceMaxFilter');
+    if (priceMaxFilter) {
+        priceMaxFilter.addEventListener('change', doFilter);
+    }
+
+    // Attach event listener to favorite filter
+    const favoriteFilter = document.getElementById('favoriteFilter');
+    if (favoriteFilter) {
+        favoriteFilter.addEventListener('change', doFilter);
+    }
+
+    // Sort handlers are now attached in renderTableHeader
 }
 
 // Global doFilter function
 function doFilter() {
+    // Save state on change
+    saveSearchState();
     const searchInput = document.getElementById('searchInput');
     const queryRaw = searchInput ? searchInput.value.trim() : '';
 
@@ -695,10 +1062,28 @@ function doFilter() {
     const contractCheckboxes = document.querySelectorAll('#contractFilterContainer input:checked');
     const selectedContracts = Array.from(contractCheckboxes).map(cb => cb.value);
 
+    // Get favorite filter
+    const favOnly = document.getElementById('favoriteFilter')?.checked || false;
+
+    // Get price filter
+    const minPrice = parseInt(document.getElementById('priceFilter')?.value || '0');
+    const maxPrice = parseInt(document.getElementById('priceMaxFilter')?.value || '999');
+
     // Filter Logic
     const filtered = allProjects.filter(p => {
+        // Favorites Match
+        if (favOnly && !favorites.has(p.id)) return false;
+
+        // Price Match
+        const priceStr = p.price || '';
+        const match = priceStr.match(/\d+/);
+        const num = match ? parseInt(match[0]) : 0;
+
+        if (minPrice > 0 && num < minPrice) return false;
+        if (maxPrice < 999 && num > maxPrice) return false;
+
         // Text Search - AND logic: all keywords must match
-        const searchableText = `${p.title || ''} ${p.skills || ''} ${p.description || ''}`.toLowerCase();
+        const searchableText = `${p.id || ''} ${p.title || ''} ${p.skills || ''} ${p.description || ''}`.toLowerCase();
         const textMatch = keywords.length === 0 || keywords.every(kw => searchableText.includes(kw));
 
         // Category Match (OR logic - if any selected, item must match one of them)
@@ -712,4 +1097,253 @@ function doFilter() {
     });
 
     renderProjects(filtered);
+    renderTableHeader();
+
+    // Save state after filtering
+    saveSearchState();
+}
+
+// --- Persistence Logic ---
+function saveSearchState() {
+    const state = {
+        query: document.getElementById('searchInput')?.value || '',
+        favOnly: document.getElementById('favoriteFilter')?.checked || false,
+        cats: Array.from(document.querySelectorAll('#categoryFilterContainer input:checked')).map(cb => cb.value),
+        contracts: Array.from(document.querySelectorAll('#contractFilterContainer input:checked')).map(cb => cb.value),
+        minPrice: document.getElementById('priceFilter')?.value || '0',
+        maxPrice: document.getElementById('priceMaxFilter')?.value || '999'
+    };
+
+    localStorage.setItem('ses_search_state', JSON.stringify(state));
+}
+
+
+function loadFilterState() {
+    const stateJson = localStorage.getItem('ses_search_state');
+    if (!stateJson) return;
+
+    try {
+        const state = JSON.parse(stateJson);
+
+        // Restore Categories
+        if (state.cats && Array.isArray(state.cats)) {
+            const catInputs = document.querySelectorAll('#categoryFilterContainer input');
+            catInputs.forEach(input => {
+                input.checked = state.cats.includes(input.value);
+            });
+        }
+
+        // Restore Contracts
+        if (state.contracts && Array.isArray(state.contracts)) {
+            const contractInputs = document.querySelectorAll('#contractFilterContainer input');
+            contractInputs.forEach(input => {
+                input.checked = state.contracts.includes(input.value);
+            });
+        }
+
+        // Restore Price
+        if (state.minPrice) {
+            const priceSelect = document.getElementById('priceFilter');
+            if (priceSelect) priceSelect.value = state.minPrice;
+        }
+        if (state.maxPrice) {
+            const priceMaxSelect = document.getElementById('priceMaxFilter');
+            if (priceMaxSelect) priceMaxSelect.value = state.maxPrice;
+        }
+
+        // Restore Favorites Filter
+        if (state.favOnly !== undefined) {
+            const favCheckbox = document.getElementById('favoriteFilter');
+            if (favCheckbox) favCheckbox.checked = state.favOnly;
+        }
+
+        // Restore Query
+        if (state.query) {
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) searchInput.value = state.query;
+        }
+    } catch (e) {
+        console.error('Failed to load search filter state', e);
+    }
+}
+
+// --- Favorites Logic ---
+function loadFavorites() {
+    const saved = localStorage.getItem('ses_favorites');
+    if (saved) {
+        try {
+            favorites = new Set(JSON.parse(saved));
+        } catch (e) {
+            console.error('Failed to load favorites', e);
+        }
+    }
+}
+
+function saveFavorites() {
+    localStorage.setItem('ses_favorites', JSON.stringify(Array.from(favorites)));
+}
+
+function toggleFavorite(id, btn, event) {
+    if (event) event.stopPropagation();
+
+    if (favorites.has(id)) {
+        favorites.delete(id);
+        btn.classList.remove('active');
+        btn.innerHTML = '<i class="fa-regular fa-star"></i>';
+    } else {
+        favorites.add(id);
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="fa-solid fa-star"></i>';
+    }
+
+    saveFavorites();
+}
+
+function toggleAllFavorites(event) {
+    if (event) event.stopPropagation();
+
+    const projects = window.currentFilteredProjects;
+    if (!projects || projects.length === 0) return;
+
+    const visibleIds = projects.map(p => p.id);
+    const hasAnyFav = visibleIds.some(id => favorites.has(id));
+
+    if (hasAnyFav) {
+        // If at least one is favorited, remove favorites from all visible projects
+        visibleIds.forEach(id => favorites.delete(id));
+    } else {
+        // If none are favorited, add all visible projects to favorites
+        visibleIds.forEach(id => favorites.add(id));
+    }
+
+    saveFavorites();
+    renderTableHeader();
+    renderProjects(projects);
+}
+
+// --- UI Tour Logic (driver.js) ---
+function startTour() {
+    if (typeof driver === 'undefined' || !driver.js) return;
+
+    const driverObj = driver.js.driver({
+        showProgress: true,
+        allowClose: true,
+        nextBtnText: '次へ',
+        prevBtnText: '前へ',
+        doneBtnText: '完了',
+        steps: [
+            {
+                element: '.logo',
+                popover: {
+                    title: 'SES案件DBへようこそ！',
+                    description: 'このツアーでは、サイトの使い方を簡単にご説明します。',
+                    side: "bottom",
+                    align: 'start'
+                }
+            },
+            {
+                element: '#searchFilterGroup',
+                popover: {
+                    title: 'キーワード検索',
+                    description: '案件名、スキル、案件番号などで検索できます。<br>スペース区切りで複数指定（AND検索）も可能です。',
+                    side: "bottom",
+                    align: 'start'
+                }
+            },
+            {
+                element: '#categoryFilterGroup',
+                popover: {
+                    title: '種別フィルター',
+                    description: '開発系やインフラなど、案件のカテゴリで絞り込めます。',
+                    side: "bottom",
+                    align: 'start'
+                }
+            },
+            {
+                element: '#contractFilterGroup',
+                popover: {
+                    title: '契約形態',
+                    description: '準委任や派遣などの形態で絞り込めます。',
+                    side: "bottom",
+                    align: 'start'
+                }
+            },
+            {
+                element: '#priceFilterGroup',
+                popover: {
+                    title: '単価範囲で絞り込む',
+                    description: '希望する月額単価の下限と上限を指定して、条件に合う案件だけを表示できます。',
+                    side: "bottom",
+                    align: 'start'
+                }
+            },
+            {
+                element: '.result-count-group',
+                popover: {
+                    title: '件数とお気に入り',
+                    description: 'ヒット件数の確認と、★をつけた「お気に入り案件」だけの表示切り替えができます。',
+                    side: "bottom",
+                    align: 'end'
+                }
+            },
+            {
+                element: '.project-table th:nth-child(2)',
+                popover: {
+                    title: '並び替えと表の調整',
+                    description: '項目名をクリックすると並び替えができます（昇順→降順→解除）。<br>また、ヘッダーをドラッグして列の移動、端をドラッグして幅の調整も可能です。',
+                    side: "bottom",
+                    align: 'start'
+                }
+            },
+            {
+                element: '.copy-title-mini-btn',
+                popover: {
+                    title: '情報の活用',
+                    description: '番号の横にあるこのボタンを押すと、IDと案件名をセットでコピーできます。',
+                    side: "top",
+                    align: 'start'
+                }
+            },
+            {
+                element: '.fav-btn',
+                popover: {
+                    title: 'お気に入り',
+                    description: '星マークを押してお気に入り登録しておくと、後から「★お気に入り」スイッチで簡単に呼び出せます。',
+                    side: "top",
+                    align: 'start'
+                }
+            },
+            {
+                element: '.row-btn-group',
+                popover: {
+                    title: '詳細',
+                    description: '「詳細コピー」で案件詳細全文コピー、「詳細を確認」でカード形式の全体情報の閲覧ができます。',
+                    side: "top",
+                    align: 'start'
+                }
+            },
+            {
+                element: '#headerRight',
+                popover: {
+                    title: '設定のリセット',
+                    description: '表示が崩れたり最初からやり直したい時は「解除」ボタンを押してください。',
+                    side: "bottom",
+                    align: 'end'
+                }
+            }
+        ]
+    });
+
+    driverObj.drive();
+    // Mark as shown
+    localStorage.setItem('ses_tour_shown', 'true');
+}
+
+// Check for first-time user tour
+function checkTourAutoStart() {
+    const shown = localStorage.getItem('ses_tour_shown');
+    if (!shown) {
+        // Delay slightly for smooth appearance after data load
+        setTimeout(startTour, 1500);
+    }
 }

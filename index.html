@@ -16,6 +16,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Styles -->
     <link rel="stylesheet" href="style.css">
+    <!-- Driver.js for UI Tour -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css" />
 </head>
 
 <body>
@@ -23,9 +25,18 @@
 
     <header>
         <div class="container header-content">
+            <div class="header-left"></div> <!-- Empty for balance -->
             <div class="logo">
                 <i class="fa-solid fa-layer-group"></i>
                 <span>SES案件DB</span>
+            </div>
+            <div class="header-right" id="headerRight">
+                <button class="tour-btn" id="startTourBtn" onclick="startTour()" title="使い方">
+                    <i class="fa-solid fa-circle-question"></i>
+                </button>
+                <button id="resetSettingsBtn" class="reset-btn" onclick="resetAllSettings()">
+                    <i class="fa-solid fa-rotate-right"></i> 解除
+                </button>
             </div>
         </div>
     </header>
@@ -34,15 +45,15 @@
         <!-- Search & Filter Section -->
         <section class="search-section">
             <div class="search-card">
-                <div class="filter-row-4col">
+                <div class="filter-row-top">
                     <!-- Search Input -->
-                    <div class="filter-group">
+                    <div class="filter-group" id="searchFilterGroup">
                         <label><i class="fa-solid fa-magnifying-glass"></i> キーワード</label>
                         <input type="text" id="searchInput" placeholder="案件名, スキルなど">
                     </div>
 
                     <!-- Category Filter -->
-                    <div class="filter-group">
+                    <div class="filter-group" id="categoryFilterGroup">
                         <label><i class="fa-solid fa-layer-group"></i> 種別</label>
                         <div id="categoryFilterContainer" class="checkbox-container">
                             <!-- Checkboxes injected via JS -->
@@ -50,18 +61,51 @@
                     </div>
 
                     <!-- Contract Type Filter -->
-                    <div class="filter-group">
+                    <div class="filter-group" id="contractFilterGroup">
                         <label><i class="fa-solid fa-briefcase"></i> 契約</label>
                         <div id="contractFilterContainer" class="checkbox-container">
                             <!-- Checkboxes injected via JS -->
                         </div>
                     </div>
 
-                    <!-- Result Count -->
+                    <!-- Price Filter -->
+                    <div class="filter-group" id="priceFilterGroup">
+                        <label><i class="fa-solid fa-yen-sign"></i> 単価範囲</label>
+                        <div class="price-range-inputs">
+                            <select id="priceFilter" onchange="doFilter()">
+                                <option value="0">下限なし</option>
+                                <option value="50">50万円〜</option>
+                                <option value="60">60万円〜</option>
+                                <option value="70">70万円〜</option>
+                                <option value="80">80万円〜</option>
+                                <option value="90">90万円〜</option>
+                                <option value="100">100万円〜</option>
+                            </select>
+                            <span class="price-separator">〜</span>
+                            <select id="priceMaxFilter" onchange="doFilter()">
+                                <option value="999">上限なし</option>
+                                <option value="60">〜60万円</option>
+                                <option value="70">〜70万円</option>
+                                <option value="80">〜80万円</option>
+                                <option value="90">〜90万円</option>
+                                <option value="100">〜100万円</option>
+                                <option value="120">〜120万円</option>
+                                <option value="150">〜150万円</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Result Count & Favorites -->
                     <div class="filter-group result-count-group">
-                        <label><i class="fa-solid fa-list"></i> 件数</label>
+                        <label><i class="fa-solid fa-star"></i> 件数 / お気に入り</label>
                         <div class="result-count-box">
-                            <span id="resultCount">0</span> / <span id="totalCount">0</span> 件
+                            <div class="count-text">
+                                <span id="resultCount">0</span> / <span id="totalCount">0</span> 件
+                            </div>
+                            <label class="checkbox-item" style="margin: 0; cursor: pointer; font-size: 0.8rem;">
+                                <input type="checkbox" id="favoriteFilter" onchange="doFilter()"
+                                    style="margin-right: 2px;"> ★お気に入り
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -119,6 +163,7 @@
 
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
     <script src="app.js"></script>
 </body>
 
