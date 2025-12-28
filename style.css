@@ -1832,6 +1832,13 @@ body.modal-open .mobile-nav-footer {
 
 /* --- MOBILE OPTIMIZATION (Card Layout & Touch UI) --- */
 @media (max-width: 768px) {
+
+    /* Hide desktop-only header features on mobile */
+    .view-toggle-container,
+    .header-xlsx-btn {
+        display: none !important;
+    }
+
     .container {
         padding: 0 12px;
     }
