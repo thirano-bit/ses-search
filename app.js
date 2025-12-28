@@ -1,6 +1,9 @@
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQY3X20AFaDYSVOwGls8Ps2nQeVbiWVhybs6SMXgd05ptpJb5opAkPzQ1SVxsU0NFXkcWunmDpr7g7Z/pub?gid=433722107&single=true&output=csv';
 
 let allProjects = [];
+let isInitialRenderComplete = false;
+let isTourActive = false;
+let currentUIArea = null; // 'table' or 'header'
 
 // Favorites state (Set of IDs)
 let favorites = new Set();
@@ -30,12 +33,19 @@ function toggleFullscreen() {
     }
 }
 
-// Allow ESC key to exit fullscreen
+// Allow ESC key to exit fullscreen or close modal
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+        // Handle Fullscreen
         const container = document.querySelector('.results-table-container');
         if (container && container.classList.contains('fullscreen')) {
             toggleFullscreen();
+        }
+        // Handle Modal
+        const modal = document.getElementById("projectModal");
+        if (modal && modal.style.display === "block") {
+            modal.style.display = "none";
+            document.body.classList.remove('modal-open');
         }
     }
 });
@@ -56,6 +66,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function fetchData() {
+    // Show loading state and start animation
+    const ls = document.getElementById('loadingState');
+    if (ls) ls.style.display = 'flex';
+    initLoadingAnimation('.loading');
+
+    // Hide table container for reveal animation
+    const rtc = document.getElementById('resultsTableContainer');
+    if (rtc) rtc.classList.remove('revealed');
+
     Papa.parse(SHEET_CSV_URL, {
         download: true,
         header: true,
@@ -79,6 +98,17 @@ function fetchData() {
                 loadFilterState();
                 // Finally apply all filters (query + restored filters)
                 doFilter();
+
+                // Elegant reveal of the table
+                setTimeout(() => {
+                    const rtc = document.getElementById('resultsTableContainer');
+                    if (rtc) rtc.classList.add('revealed');
+
+                    // Allow interactive logic after table is settled
+                    setTimeout(() => {
+                        isInitialRenderComplete = true;
+                    }, 1500);
+                }, 100);
             } catch (e) {
                 console.error(e);
                 showError(`データ処理エラー: ${e.message}`);
@@ -135,10 +165,13 @@ function transformData(rawData) {
         const keys = Object.keys(row);
         const copyTextValue = row[K_COPYTEXT] || (keys.length >= 18 ? row[keys[17]] : '');
 
+        let statusVal = row[K_STATUS] || '';
+        if (statusVal.toLowerCase() === 'new') statusVal = '新規';
+
         return {
             id: row[K_ID] || '',
             category: row[K_CATEGORY] || '',
-            status: row[K_STATUS] || '',
+            status: statusVal,
             title: row[K_TITLE] || '案件名なし',
             description: row[K_DESC] || '',
             skills: row[K_SKILL] || '',
@@ -210,14 +243,80 @@ function populateFilters(projects) {
         label.appendChild(document.createTextNode(` ${type}`));
         contractContainer.appendChild(label);
     });
+
+    // Initialize Scroll Fog for both containers
+    initScrollFog(categoryContainer);
+    initScrollFog(contractContainer);
+}
+
+/**
+ * Initializes "fog" effects on the edges of a scrollable container
+ * to indicate more content is available.
+ */
+function initScrollFog(container) {
+    if (!container) return;
+
+    // Direct parent might already be a scroll-wrapper from a previous run
+    let wrapper = container.parentElement;
+    if (!wrapper.classList.contains('scroll-wrapper')) {
+        wrapper = document.createElement('div');
+        wrapper.className = 'scroll-wrapper';
+        container.parentNode.insertBefore(wrapper, container);
+        wrapper.appendChild(container);
+    }
+
+    // Add fog elements if they don't exist
+    if (!wrapper.querySelector('.scroll-fog.left')) {
+        const leftFog = document.createElement('div');
+        leftFog.className = 'scroll-fog left';
+        wrapper.appendChild(leftFog);
+    }
+    if (!wrapper.querySelector('.scroll-fog.right')) {
+        const rightFog = document.createElement('div');
+        rightFog.className = 'scroll-fog right';
+        wrapper.appendChild(rightFog);
+    }
+
+    const leftFog = wrapper.querySelector('.scroll-fog.left');
+    const rightFog = wrapper.querySelector('.scroll-fog.right');
+
+    const updateFog = () => {
+        const scrollLeft = container.scrollLeft;
+        const maxScroll = container.scrollWidth - container.clientWidth;
+
+        // Tolerance for floating point issues
+        if (scrollLeft > 5) {
+            leftFog.classList.add('visible');
+        } else {
+            leftFog.classList.remove('visible');
+        }
+
+        if (scrollLeft < maxScroll - 5) {
+            rightFog.classList.add('visible');
+        } else {
+            rightFog.classList.remove('visible');
+        }
+    };
+
+    container.addEventListener('scroll', updateFog);
+    // Also update on window resize or when first populated
+    window.addEventListener('resize', updateFog);
+
+    // MutationObserver to catch content updates (like filtered result counts)
+    const observer = new MutationObserver(updateFog);
+    observer.observe(container, { childList: true });
+
+    // Initial check after a short delay for rendering
+    setTimeout(updateFog, 100);
 }
 
 function resetAllSettings() {
-    if (confirm('すべての設定（検索条件、単価範囲、列の並び順、列の幅、お気に入り）をリセットしますか？')) {
+    if (confirm('すべての設定をリセットし、初期状態に戻しますか？')) {
         localStorage.removeItem('ses_search_state');
         localStorage.removeItem('ses_column_order');
         localStorage.removeItem('ses_column_widths');
         localStorage.removeItem('ses_favorites');
+        localStorage.removeItem('ses_filter_collapsed');
         location.reload();
     }
 }
@@ -230,7 +329,7 @@ let currentSort = {
 
 // --- Dynamic Column Configuration ---
 let columnOrder = [
-    'category', 'title', 'description', 'skills', 'location',
+    'category', 'title', 'skills', 'description', 'location',
     'period', 'price', 'type', 'foreign', 'subcontract', 'others'
 ];
 
@@ -244,7 +343,9 @@ const COLUMNS = {
         render: (project) => {
             let statusBadge = '';
             if (project.status === '新規') {
-                statusBadge = '<span class="status-badge new">New</span>';
+                statusBadge = '<span class="status-badge new">新規</span>';
+            } else if (project.status === '更新') {
+                statusBadge = '<span class="status-badge update">更新</span>';
             } else if (project.status) {
                 statusBadge = `<span class="status-badge">${escapeHtml(project.status)}</span>`;
             }
@@ -265,7 +366,7 @@ const COLUMNS = {
             return `
                 <div class="title-container">
                     <div class="title-main-group">
-                        <div>${titleHtml}</div>
+                        <div class="col-title-text">${titleHtml}</div>
                         <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px; margin-bottom: 12px;">
                             <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 400;">${escapeHtml(project.id)}</div>
                             <button class="copy-title-mini-btn" title="案件名コピー" data-title-copy="${escapeHtml(project.id)}｜${escapeHtml(project.title)}" onclick="copyTitleOnly(this, event)">
@@ -321,14 +422,14 @@ const COLUMNS = {
         label: '場所',
         width: 100,
         sort: 'location',
-        render: (project) => escapeHtml(project.location)
+        render: (project) => `<div class="col-scroll">${escapeHtml(project.location)}</div>`
     },
     period: {
         id: 'period',
         label: '期間',
         width: 200,
         sort: 'period',
-        render: (project) => escapeHtml(project.period)
+        render: (project) => `<div class="col-scroll">${escapeHtml(project.period)}</div>`
     },
     price: {
         id: 'price',
@@ -633,6 +734,9 @@ function renderProjects(projects) {
 
     // Apply dynamic sticky to short cells
     applyDynamicSticky();
+
+    // Ensure mobile navigation buttons are updated for the new set of projects
+    updateMobileNavStatus();
 }
 
 // Apply sticky positioning to cells shorter than their row
@@ -723,12 +827,19 @@ function createResizableColumn(col, resizer) {
         resizer.classList.add('resizing');
     };
 
+    let frameId = null;
     const mouseMoveHandler = (e) => {
-        const dx = e.clientX - x;
-        // Allow Shrinking: Only limit is > 10px so it doesn't disappear
-        currentWidth = Math.max(10, w + dx);
-        col.style.width = `${currentWidth}px`;
-        col.style.minWidth = `${currentWidth}px`;
+        if (frameId) {
+            cancelAnimationFrame(frameId);
+        }
+
+        frameId = requestAnimationFrame(() => {
+            const dx = e.clientX - x;
+            // Allow Shrinking: Only limit is > 10px so it doesn't disappear
+            currentWidth = Math.max(10, w + dx);
+            col.style.width = `${currentWidth}px`;
+            col.style.minWidth = `${currentWidth}px`;
+        });
     };
 
     const mouseUpHandler = () => {
@@ -770,11 +881,13 @@ function setupModal() {
 
     span.onclick = function () {
         modal.style.display = "none";
+        document.body.classList.remove('modal-open');
     }
 
     window.onclick = function (event) {
         if (event.target == modal) {
             modal.style.display = "none";
+            document.body.classList.remove('modal-open');
         }
     }
 }
@@ -814,9 +927,12 @@ function openModal(project) {
     `;
 
     const isNew = project.status && project.status.includes('新規');
+    const isUpdate = project.status && project.status.includes('更新');
+
     // Reserve space for status even if empty to prevent layout shift
+    const statusClass = isNew ? 'new' : (isUpdate ? 'update' : '');
     const statusHtml = project.status
-        ? `<div class="status-badge ${isNew ? 'new' : ''}" style="margin-bottom:8px; display:inline-block;">${escapeHtml(project.status)}</div>`
+        ? `<div class="status-badge ${statusClass}" style="margin-bottom:8px; display:inline-block;">${escapeHtml(project.status)}</div>`
         : `<div style="height: 24px; margin-bottom: 8px;"></div>`;
 
     // Store copyText for the copy button
@@ -878,6 +994,7 @@ function openModal(project) {
         `;
 
     modal.style.display = "block";
+    document.body.classList.add('modal-open');
 }
 
 // Function to handle modal navigation
@@ -1099,8 +1216,60 @@ function doFilter() {
     renderProjects(filtered);
     renderTableHeader();
 
+    // Update filter summary for minimized view
+    updateFilterSummary();
+
     // Save state after filtering
     saveSearchState();
+}
+
+/**
+ * Update the text summary shown when the filter section is minimized
+ */
+function updateFilterSummary() {
+    const summaryEl = document.getElementById('filterSummary');
+    if (!summaryEl) return;
+
+    const parts = [];
+
+    // Keywords
+    const query = document.getElementById('searchInput')?.value.trim();
+    if (query) parts.push(`キーワード: ${query}`);
+
+    // Categories
+    const selectedCats = Array.from(document.querySelectorAll('#categoryFilterContainer input:checked')).map(cb => cb.value);
+    if (selectedCats.length > 0) parts.push(`種別: ${selectedCats.join(',')}`);
+
+    // Contracts
+    const selectedContracts = Array.from(document.querySelectorAll('#contractFilterContainer input:checked')).map(cb => cb.value);
+    if (selectedContracts.length > 0) parts.push(`契約: ${selectedContracts.join(',')}`);
+
+    // Price
+    const minPrice = document.getElementById('priceFilter')?.value;
+    const maxPrice = document.getElementById('priceMaxFilter')?.value;
+    if ((minPrice && minPrice !== '0') || (maxPrice && maxPrice !== '999')) {
+        const minText = minPrice !== '0' ? `${minPrice}万` : 'なし';
+        const maxText = maxPrice !== '999' ? `${maxPrice}万` : 'なし';
+        parts.push(`単価: ${minText}〜${maxText}`);
+    }
+
+    // Favorite Only
+    const favOnly = document.getElementById('favoriteFilter')?.checked;
+    if (favOnly) parts.push('★あり');
+
+    if (parts.length > 0) {
+        summaryEl.textContent = '｜ ' + parts.join(' ｜ ');
+    } else {
+        summaryEl.textContent = '';
+    }
+
+    // Update Hit Count
+    const hitCountEl = document.getElementById('filterHitCount');
+    if (hitCountEl) {
+        const resultCount = document.getElementById('resultCount')?.textContent || '0';
+        const totalCount = document.getElementById('totalCount')?.textContent || '0';
+        hitCountEl.textContent = `Hits: ${resultCount} / ${totalCount}`;
+    }
 }
 
 // --- Persistence Logic ---
@@ -1225,67 +1394,53 @@ function toggleAllFavorites(event) {
 function startTour() {
     if (typeof driver === 'undefined' || !driver.js) return;
 
-    const driverObj = driver.js.driver({
-        showProgress: true,
-        allowClose: true,
-        nextBtnText: '次へ',
-        prevBtnText: '前へ',
-        doneBtnText: '完了',
-        steps: [
-            {
-                element: '.logo',
-                popover: {
-                    title: 'SES案件DBへようこそ！',
-                    description: 'このツアーでは、サイトの使い方を簡単にご説明します。',
-                    side: "bottom",
-                    align: 'start'
-                }
-            },
-            {
-                element: '#searchFilterGroup',
-                popover: {
-                    title: 'キーワード検索',
-                    description: '案件名、スキル、案件番号などで検索できます。<br>スペース区切りで複数指定（AND検索）も可能です。',
-                    side: "bottom",
-                    align: 'start'
-                }
-            },
-            {
-                element: '#categoryFilterGroup',
-                popover: {
-                    title: '種別フィルター',
-                    description: '開発系やインフラなど、案件のカテゴリで絞り込めます。',
-                    side: "bottom",
-                    align: 'start'
-                }
-            },
-            {
-                element: '#contractFilterGroup',
-                popover: {
-                    title: '契約形態',
-                    description: '準委任や派遣などの形態で絞り込めます。',
-                    side: "bottom",
-                    align: 'start'
-                }
-            },
-            {
-                element: '#priceFilterGroup',
-                popover: {
-                    title: '単価範囲で絞り込む',
-                    description: '希望する月額単価の下限と上限を指定して、条件に合う案件だけを表示できます。',
-                    side: "bottom",
-                    align: 'start'
-                }
-            },
-            {
-                element: '.result-count-group',
-                popover: {
-                    title: '件数とお気に入り',
-                    description: 'ヒット件数の確認と、★をつけた「お気に入り案件」だけの表示切り替えができます。',
-                    side: "bottom",
-                    align: 'end'
-                }
-            },
+    // Expand filter section if collapsed for tour visibility
+    const filterContent = document.getElementById('filterContent');
+    if (filterContent && filterContent.classList.contains('collapsed')) {
+        toggleFilterSection();
+    }
+
+    const isMobile = window.innerWidth <= 768;
+
+    const steps = [
+        {
+            element: '.logo',
+            popover: {
+                title: 'SES案件DBへようこそ！',
+                description: 'このツアーでは、サイトの使い方を簡単にご説明します。',
+                side: "bottom",
+                align: 'start'
+            }
+        },
+        {
+            element: '.view-toggle-container',
+            popover: {
+                title: 'ミニマム表示モード',
+                description: 'このスイッチをONにすると、表をギュッと凝縮して、一度により多くの案件を俯瞰できるようになります。',
+                side: "bottom",
+                align: 'start'
+            }
+        },
+        {
+            element: '.filter-row-top',
+            popover: {
+                title: '案件の絞り込み',
+                description: 'キーワード、種別、契約形態、単価を一括で指定できます。<br>キーワードはスペース区切りで複数指定（AND検索）も可能です。',
+                side: "bottom",
+                align: 'start'
+            }
+        },
+        {
+            element: '.result-count-group',
+            popover: {
+                title: '件数とお気に入り',
+                description: 'ヒット件数の確認と、★をつけた「お気に入り案件」だけの表示切り替えができます。',
+                side: "bottom",
+                align: 'end'
+            }
+        },
+        // Skip sorting step on mobile as requested
+        ...(isMobile ? [] : [
             {
                 element: '.project-table th:nth-child(2)',
                 popover: {
@@ -1294,44 +1449,76 @@ function startTour() {
                     side: "bottom",
                     align: 'start'
                 }
-            },
+            }
+        ]),
+        {
+            element: '.copy-title-mini-btn',
+            popover: {
+                title: '情報の活用',
+                description: '番号の横にあるこのボタンを押すと、IDと案件名をセットでコピーできます。',
+                side: "top",
+                align: 'start'
+            }
+        },
+        {
+            element: '.fav-btn',
+            popover: {
+                title: 'お気に入り',
+                description: '星マークを押してお気に入り登録しておくと、後から「★お気に入り」スイッチで簡単に呼び出せます。',
+                side: "top",
+                align: 'start'
+            }
+        },
+        {
+            element: '.row-btn-group',
+            popover: {
+                title: '詳細',
+                description: '・<b>詳細コピー</b>：案件詳細を全文コピーします<br>・<b>詳細を確認</b>：カード形式で全情報を閲覧できます',
+                side: "top",
+                align: 'start'
+            }
+        },
+        {
+            element: '.header-xlsx-btn',
+            popover: {
+                title: 'Excelダウンロード',
+                description: '今表示されている案件リストを、そのままExcel形式でダウンロードできます。',
+                side: "bottom",
+                align: 'end'
+            }
+        },
+        {
+            element: '#resetSettingsBtn',
+            popover: {
+                title: '設定のリセット',
+                description: '表示が崩れたり最初からやり直したい時は「解除」ボタンを押してください。',
+                side: "bottom",
+                align: 'end'
+            }
+        },
+        // Skip fullscreen step on mobile as requested
+        ...(isMobile ? [] : [
             {
-                element: '.copy-title-mini-btn',
+                element: '.fullscreen-btn',
                 popover: {
-                    title: '情報の活用',
-                    description: '番号の横にあるこのボタンを押すと、IDと案件名をセットでコピーできます。',
-                    side: "top",
-                    align: 'start'
-                }
-            },
-            {
-                element: '.fav-btn',
-                popover: {
-                    title: 'お気に入り',
-                    description: '星マークを押してお気に入り登録しておくと、後から「★お気に入り」スイッチで簡単に呼び出せます。',
-                    side: "top",
-                    align: 'start'
-                }
-            },
-            {
-                element: '.row-btn-group',
-                popover: {
-                    title: '詳細',
-                    description: '「詳細コピー」で案件詳細全文コピー、「詳細を確認」でカード形式の全体情報の閲覧ができます。',
-                    side: "top",
-                    align: 'start'
-                }
-            },
-            {
-                element: '#headerRight',
-                popover: {
-                    title: '設定のリセット',
-                    description: '表示が崩れたり最初からやり直したい時は「解除」ボタンを押してください。',
-                    side: "bottom",
-                    align: 'end'
+                    title: '全画面表示',
+                    description: 'このボタンを押すと、ブラウザを全画面モードに切り替えて、さらに広い範囲で案件を確認できます。',
+                    side: "left",
+                    align: 'center'
                 }
             }
-        ]
+        ])
+    ];
+
+    const driverObj = driver.js.driver({
+        showProgress: true,
+        allowClose: true,
+        nextBtnText: '次へ',
+        prevBtnText: '前へ',
+        doneBtnText: '完了',
+        onHighlightStarted: () => { isTourActive = true; },
+        onDestroyed: () => { isTourActive = false; },
+        steps: steps
     });
 
     driverObj.drive();
@@ -1346,4 +1533,550 @@ function checkTourAutoStart() {
         // Delay slightly for smooth appearance after data load
         setTimeout(startTour, 1500);
     }
+}
+
+// Collapsible Filter Section Logic
+function toggleFilterSection() {
+    const content = document.getElementById('filterContent');
+    const icon = document.getElementById('filterToggleIcon');
+    const card = content.closest('.search-card');
+
+    const isCollapsed = content.classList.toggle('collapsed');
+    icon.classList.toggle('rotate');
+    if (card) card.classList.toggle('minimized', isCollapsed);
+
+    // Save state
+    localStorage.setItem('ses_filter_collapsed', isCollapsed);
+}
+
+// Restore filter state on load
+function restoreFilterState() {
+    const isCollapsed = localStorage.getItem('ses_filter_collapsed') === 'true';
+    if (isCollapsed) {
+        document.getElementById('filterContent').classList.add('collapsed');
+        document.getElementById('filterToggleIcon').classList.add('rotate');
+        const card = document.getElementById('filterContent').closest('.search-card');
+        if (card) card.classList.add('minimized');
+    }
+    updateFilterSummary();
+}
+
+/**
+ * Custom fast smooth scroll
+ */
+function fastSmoothScroll(element, target, duration) {
+    const start = element.scrollTop;
+    const change = target - start;
+    let startTime = null;
+
+    function animateScroll(currentTime) {
+        if (!startTime) startTime = currentTime;
+        const timeElapsed = currentTime - startTime;
+        const progress = Math.min(timeElapsed / duration, 1);
+
+        // easeOutCubic for a snappy start and soft landing
+        const ease = 1 - Math.pow(1 - progress, 3);
+
+        element.scrollTop = start + change * ease;
+
+        if (timeElapsed < duration) {
+            requestAnimationFrame(animateScroll);
+        }
+    }
+
+    requestAnimationFrame(animateScroll);
+}
+
+/**
+ * Mobile Card Navigation Logic
+ */
+let isNavigating = false;
+
+function navigateMobileCards(direction) {
+    if (isNavigating) return;
+
+    const container = document.getElementById('resultsTableContainer');
+    if (!container) return;
+
+    // tr elements are the cards in mobile view
+    const cards = Array.from(document.querySelectorAll('.project-table tbody tr'));
+    if (cards.length === 0) return;
+
+    // Current scroll position within the container
+    const currentScrollTop = container.scrollTop;
+    const containerHeight = container.clientHeight;
+    // We target the middle of the container to find the "current" card
+    const containerCenter = currentScrollTop + (containerHeight / 2);
+
+    let currentIdx = -1;
+    let minDistance = Infinity;
+
+    cards.forEach((card, index) => {
+        const cardTop = card.offsetTop;
+        const cardHeight = card.offsetHeight;
+        const cardCenter = cardTop + (cardHeight / 2);
+        const distance = Math.abs(cardCenter - containerCenter);
+
+        if (distance < minDistance) {
+            minDistance = distance;
+            currentIdx = index;
+        }
+    });
+
+    const targetIdx = currentIdx + direction;
+    if (targetIdx >= 0 && targetIdx < cards.length) {
+        activateMobileNav(); // Permanently make solid on click
+        const targetCard = cards[targetIdx];
+        isNavigating = true;
+
+        // Scroll target is the top of the card
+        const targetScrollTop = targetCard.offsetTop;
+
+        // Use custom fast smooth scroll (300ms duration)
+        fastSmoothScroll(container, targetScrollTop, 300);
+
+        // Prevention of double triggers
+        setTimeout(() => {
+            isNavigating = false;
+            updateMobileNavStatus();
+        }, 350);
+    }
+}
+
+// State for mobile nav active (permanently solid once touched)
+let isMobileNavActive = false;
+
+function activateMobileNav() {
+    if (isMobileNavActive) return;
+    isMobileNavActive = true;
+    const footer = document.getElementById('mobileNavFooter');
+    if (footer) footer.classList.remove('faded');
+}
+
+function updateMobileNavStatus() {
+    const footer = document.getElementById('mobileNavFooter');
+    if (!footer || window.innerWidth > 768) return;
+
+    if (!isMobileNavActive) {
+        footer.classList.add('faded');
+    }
+
+    const container = document.getElementById('resultsTableContainer');
+    if (!container) return;
+
+    const cards = document.querySelectorAll('.project-table tbody tr');
+    const prevBtn = footer.querySelector('.prev');
+    const nextBtn = footer.querySelector('.next');
+
+    if (cards.length <= 1) {
+        footer.style.opacity = '0';
+        footer.style.pointerEvents = 'none';
+        return;
+    } else {
+        footer.style.opacity = '1';
+        footer.style.pointerEvents = 'auto';
+    }
+
+    // Scroll positioning within the container
+    const scrollPos = container.scrollTop;
+    const maxScroll = container.scrollHeight - container.clientHeight;
+
+    if (scrollPos <= 20) {
+        prevBtn.disabled = true;
+    } else {
+        prevBtn.disabled = false;
+    }
+
+    if (scrollPos >= maxScroll - 20) {
+        nextBtn.disabled = true;
+    } else {
+        nextBtn.disabled = false;
+    }
+}
+
+/**
+ * XLSX Export Functionality
+ */
+function downloadAsXlsx() {
+    const projects = window.currentFilteredProjects || [];
+    if (projects.length === 0) {
+        alert("ダウンロードする案件がありません。");
+        return;
+    }
+
+    // Map projects to a format suitable for Excel
+    const exportData = projects.map(p => ({
+        "種別": p.category || '',
+        "状態": p.status || '',
+        "案件番号": p.id || '',
+        "案件名": p.title || '',
+        "業務概要": p.description || '',
+        "スキル": p.skills || '',
+        "場所": p.location || '',
+        "期間": p.period || '',
+        "単価": p.price || '',
+        "契約形態": p.type || '',
+        "外国籍": p.foreign || '',
+        "再委託": p.subcontract || '',
+        "備考/その他": p.others || ''
+    }));
+
+    // Create a new workbook and worksheet
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "案件一覧");
+
+    // Set column widths (optional but nice)
+    const wscols = [
+        { wch: 10 }, // 種別
+        { wch: 10 }, // 状態
+        { wch: 15 }, // 案件番号
+        { wch: 40 }, // 案件名
+        { wch: 50 }, // 業務概要
+        { wch: 40 }, // スキル
+        { wch: 15 }, // 場所
+        { wch: 20 }, // 期間
+        { wch: 12 }, // 単価
+        { wch: 12 }, // 契約形態
+        { wch: 10 }, // 外国籍
+        { wch: 10 }, // 再委託
+        { wch: 30 }  // 備考/その他
+    ];
+    worksheet['!cols'] = wscols;
+
+    // Generate filename with timestamp
+    const now = new Date();
+    const timestamp = now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0') + "_" +
+        String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0');
+    const filename = `案件一覧_${timestamp}.xlsx`;
+
+    // Trigger file download
+    XLSX.writeFile(workbook, filename);
+}
+
+// Initial setup for navigation observers
+document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('resultsTableContainer');
+    const footer = document.getElementById('mobileNavFooter');
+
+    if (container) {
+        container.addEventListener('scroll', () => {
+            if (!window._navUpdateTimeout) {
+                window._navUpdateTimeout = setTimeout(() => {
+                    updateMobileNavStatus();
+                    window._navUpdateTimeout = null;
+                }, 100);
+            }
+        });
+    }
+
+    if (footer) {
+        // Once touched, keep it solid
+        footer.addEventListener('touchstart', activateMobileNav, { passive: true });
+        footer.addEventListener('mousedown', activateMobileNav);
+    }
+});
+
+/**
+ * Auto-toggle search filter based on header visibility.
+ * Minimizes when header is gone, expands when header returns.
+ */
+function initAutoMinimize() {
+    // Legacy auto-minimize logic (IntersectionObserver)
+    // We might want to disable this on PC if interactive logic is active
+    const header = document.querySelector('header');
+    const filterContent = document.getElementById('filterContent');
+    if (!header || !filterContent) return;
+
+    const observer = new IntersectionObserver((entries) => {
+        // Only run on mobile or if render isn't complete yet
+        if (window.innerWidth <= 768 || !isInitialRenderComplete) {
+            entries.forEach(entry => {
+                const isCollapsed = filterContent.classList.contains('collapsed');
+                if (entry.intersectionRatio === 0 && !isCollapsed) {
+                    toggleFilterSection();
+                }
+                else if (entry.intersectionRatio >= 0.5 && isCollapsed) {
+                    toggleFilterSection();
+                }
+            });
+        }
+    }, {
+        threshold: [0, 0.5]
+    });
+
+    observer.observe(header);
+}
+
+/**
+ * Interactive Mouse-Driven Layout Logic (PC Only)
+ * Area ① (Table): Minimize Search window, scroll to bottom
+ * Area ② (Above Table): Maximize Search window, scroll to top
+ */
+function initInteractiveLayoutLogic() {
+    window.addEventListener('mousemove', (e) => {
+        // Constraints Check
+        if (!isInitialRenderComplete || window.innerWidth <= 768 || isTourActive) return;
+
+        const tableContainer = document.getElementById('resultsTableContainer');
+        if (!tableContainer) return;
+
+        const tableTop = tableContainer.getBoundingClientRect().top;
+        const filterContent = document.getElementById('filterContent');
+        const isCollapsed = filterContent.classList.contains('collapsed');
+
+        // Area ①: Over Table
+        if (e.clientY >= tableTop) {
+            if (currentUIArea !== 'table') {
+                currentUIArea = 'table';
+
+                // Collapse search if open
+                if (!isCollapsed) {
+                    toggleFilterSection();
+                }
+
+                // Scroll to bottom to maximize table view
+                window.scrollTo({
+                    top: document.body.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+        }
+        // Area ②: Above Table (Header area)
+        else {
+            if (currentUIArea !== 'header') {
+                currentUIArea = 'header';
+
+                // Expand search if closed
+                if (isCollapsed) {
+                    toggleFilterSection();
+                }
+
+                // Scroll to top to see search tools
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            }
+        }
+    });
+}
+
+/**
+ * Toggle Minimum View Mode
+ */
+function toggleMiniMode() {
+    const isChecked = document.getElementById('miniModeToggle').checked;
+    const container = document.getElementById('resultsContainer');
+    if (!container) return;
+
+    if (isChecked) {
+        container.classList.add('mini-mode');
+        localStorage.setItem('ses_mini_mode', 'true');
+    } else {
+        container.classList.remove('mini-mode');
+        localStorage.setItem('ses_mini_mode', 'false');
+    }
+}
+
+/**
+ * Restore Minimum View Mode on load
+ */
+function restoreMiniMode() {
+    const saved = localStorage.getItem('ses_mini_mode');
+    if (saved === 'true') {
+        const toggle = document.getElementById('miniModeToggle');
+        if (toggle) toggle.checked = true;
+
+        const container = document.getElementById('resultsContainer');
+        if (container) container.classList.add('mini-mode');
+    }
+}
+
+// Initialize things
+window.addEventListener('load', () => {
+    restoreFilterState();
+    restoreMiniMode();
+    initAutoMinimize();
+    initInteractiveLayoutLogic();
+    initThreeBackground();
+    updateMobileNavStatus(); // Ensure mobile nav is showing if on mobile
+});
+
+/**
+ * --- Three.js 3D Background Animation ---
+ * Advanced replacement for Canvas 2D background
+ */
+function initThreeBackground() {
+    const canvas = document.getElementById('bgCanvas');
+    if (!canvas || typeof THREE === 'undefined') return;
+
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x020617);
+
+    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+    camera.position.z = 30;
+
+    const renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        alpha: true
+    });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const themeColors = [
+        0x3b82f6,
+        0x1e293b,
+        0xfbbf24,
+        0x60a5fa
+    ];
+
+    const particlesCount = 80;
+    const posArray = new Float32Array(particlesCount * 3);
+    const colorArray = new Float32Array(particlesCount * 3);
+    const sizeArray = new Float32Array(particlesCount);
+
+    const particleStates = [];
+
+    for (let i = 0; i < particlesCount; i++) {
+        posArray[i * 3] = (Math.random() - 0.5) * 100;
+        posArray[i * 3 + 1] = (Math.random() - 0.5) * 100;
+        posArray[i * 3 + 2] = (Math.random() - 0.5) * 50;
+
+        const color = new THREE.Color(themeColors[Math.floor(Math.random() * themeColors.length)]);
+        colorArray[i * 3] = color.r;
+        colorArray[i * 3 + 1] = color.g;
+        colorArray[i * 3 + 2] = color.b;
+
+        sizeArray[i] = Math.random() * 15 + 5;
+
+        particleStates.push({
+            xOffset: Math.random() * 100,
+            yOffset: Math.random() * 100,
+            speed: Math.random() * 0.005 + 0.002
+        });
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizeArray, 1));
+
+    const material = new THREE.ShaderMaterial({
+        uniforms: {
+            time: { value: 0 }
+        },
+        vertexShader: `
+            attribute float size;
+            attribute vec3 color;
+            varying vec3 vColor;
+            void main() {
+                vColor = color;
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_PointSize = size * (300.0 / -mvPosition.z);
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `,
+        fragmentShader: `
+            varying vec3 vColor;
+            void main() {
+                float r = distance(gl_PointCoord, vec2(0.5));
+                if (r > 0.5) discard;
+                float strength = 1.0 - (r * 2.0);
+                strength = pow(strength, 2.5);
+                gl_FragColor = vec4(vColor, strength * 0.7);
+            }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthTest: false
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+
+    window.addEventListener('resize', () => {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+    });
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+        const time = clock.getElapsedTime();
+        material.uniforms.time.value = time;
+
+        const positions = geometry.attributes.position.array;
+
+        for (let i = 0; i < particlesCount; i++) {
+            const state = particleStates[i];
+            positions[i * 3] += Math.sin(time * 0.5 + state.xOffset) * 0.02;
+            positions[i * 3 + 1] += Math.cos(time * 0.5 + state.yOffset) * 0.02;
+        }
+
+        geometry.attributes.position.needsUpdate = true;
+        particles.rotation.y = time * 0.05;
+        particles.rotation.x = time * 0.02;
+
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+    }
+
+    animate();
+}
+
+/**
+ * --- Advanced Loading Animation (Text Slice) ---
+ * High-performance Vanilla JS port of the Dribbble design
+ */
+function initLoadingAnimation(selector) {
+    const elem = document.querySelector(selector);
+    if (!elem) return;
+
+    // Wrap initial text in a div if not already
+    if (!elem.querySelector('div')) {
+        const text = elem.textContent;
+        elem.innerHTML = `<div>${text}</div>`;
+    }
+
+    const contentDiv = elem.querySelector('div');
+    const text = contentDiv.textContent;
+    const width = Math.ceil(elem.getBoundingClientRect().width);
+
+    // Clear existing spans
+    const existingSpans = elem.querySelectorAll('span');
+    existingSpans.forEach(s => s.remove());
+
+    const min = 20, max = 70;
+    const minMove = 10, maxMove = 20;
+
+    for (let i = 1; i < width; i++) {
+        const num = Math.floor(Math.random() * (max - min + 1)) + min;
+        const numMove = Math.floor(Math.random() * (maxMove - minMove + 1)) + minMove;
+        const dir = (i % 2 === 0) ? 1 : -1;
+
+        const span = document.createElement('span');
+        span.textContent = text;
+        span.style.setProperty('--x', (i - 1) + 'px');
+        span.style.setProperty('--move-y', (num * dir) + 'px');
+        span.style.setProperty('--move-y-s', ((i % 2 === 0) ? num * dir - numMove : num * dir + numMove) + 'px');
+        span.style.setProperty('--delay', (i * 10) + 'ms');
+
+        elem.appendChild(span);
+    }
+
+    elem.classList.remove('start');
+    // Force reflow
+    void elem.offsetWidth;
+    elem.classList.add('start');
 }
