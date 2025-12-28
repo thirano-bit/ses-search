@@ -19,19 +19,50 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Toggle fullscreen mode for table
-function toggleFullscreen() {
+async function toggleFullscreen() {
     const container = document.querySelector('.results-table-container');
     const btn = container.querySelector('.fullscreen-btn');
-    container.classList.toggle('fullscreen');
 
-    if (container.classList.contains('fullscreen')) {
-        btn.innerHTML = '<i class="fa-solid fa-compress"></i> 終了';
-        document.body.style.overflow = 'hidden';
+    if (!document.fullscreenElement) {
+        try {
+            if (container.requestFullscreen) {
+                await container.requestFullscreen();
+            } else if (container.webkitRequestFullscreen) {
+                await container.webkitRequestFullscreen();
+            } else if (container.msRequestFullscreen) {
+                await container.msRequestFullscreen();
+            }
+            container.classList.add('fullscreen');
+            btn.innerHTML = '<i class="fa-solid fa-compress"></i> 終了';
+        } catch (err) {
+            console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+            // Fallback to pseudo-fullscreen if API fails
+            container.classList.add('fullscreen');
+            btn.innerHTML = '<i class="fa-solid fa-compress"></i> 終了';
+            document.body.style.overflow = 'hidden';
+        }
     } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+        container.classList.remove('fullscreen');
         btn.innerHTML = '<i class="fa-solid fa-expand"></i> 全画面';
         document.body.style.overflow = '';
     }
 }
+
+// Handle fullscreen change event (e.g. when user presses ESC)
+document.addEventListener('fullscreenchange', () => {
+    const container = document.querySelector('.results-table-container');
+    const btn = container?.querySelector('.fullscreen-btn');
+    if (!container || !btn) return;
+
+    if (!document.fullscreenElement) {
+        container.classList.remove('fullscreen');
+        btn.innerHTML = '<i class="fa-solid fa-expand"></i> 全画面';
+        document.body.style.overflow = '';
+    }
+});
 
 // Allow ESC key to exit fullscreen or close modal
 document.addEventListener('keydown', (e) => {

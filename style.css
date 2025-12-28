@@ -1253,16 +1253,21 @@ th.drag-over {
 }
 
 /* Fullscreen mode for table */
-.results-table-container.fullscreen {
+.results-table-container.fullscreen,
+.results-table-container:fullscreen {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    max-height: 100vh;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
     z-index: 1000;
     border-radius: 0;
     margin: 0;
+    background: #0f172a;
+    /* Force solid dark background in fullscreen */
 }
 
 .fullscreen-btn {
