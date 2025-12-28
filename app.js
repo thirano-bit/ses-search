@@ -329,8 +329,8 @@ let currentSort = {
 
 // --- Dynamic Column Configuration ---
 let columnOrder = [
-    'category', 'title', 'skills', 'description', 'location',
-    'period', 'price', 'type', 'foreign', 'subcontract', 'others'
+    'category', 'title', 'price', 'skills', 'description', 'location',
+    'period', 'type', 'foreign', 'subcontract', 'others'
 ];
 
 const COLUMNS = {
