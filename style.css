@@ -1,25 +1,27 @@
 :root {
-    --primary: #3b82f6;
-    /* Professional Blue */
-    --primary-dark: #2563eb;
-    --bg-dark: #0f172a;
-    /* Base Slate */
-    /* Surface Steel - Semi-transparent for glass effect */
-    --bg-card: rgba(30, 41, 59, 0.85);
-    --text-main: #f8fafc;
-    --text-muted: #94a3b8;
-    --accent: #60a5fa;
-    /* Light Blue */
+    --primary: #60a5fa;
+    /* More vibrant light blue */
+    --primary-dark: #3b82f6;
+    --bg-dark: #020617;
+    /* Deepest Navy/Black */
+    --bg-card: rgba(15, 23, 42, 0.98);
+    /* Near opaque, darker card */
+    --text-main: #ffffff;
+    /* Pure White */
+    --text-muted: #cbd5e1;
+    /* Lighter Slate for secondary text */
+    --accent: #3b82f6;
     --accent-gold: #fbbf24;
-    /* Tactile Gold */
-    --border: #334155;
-    /* Solid Border Steel */
-    --glass: rgba(30, 41, 59, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.08);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
-    --shadow-3d: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+    --border: #475569;
+    /* Brighter, sharper border */
+    --glass: rgba(15, 23, 42, 0.85);
+    /* Darker glass context */
+    --glass-border: rgba(255, 255, 255, 0.15);
+    /* Crisper glass edge */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+    --shadow-3d: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
 }
 
 /* Keyword highlight */
@@ -834,10 +836,11 @@ input:checked+.slider:before {
 }
 
 .project-table th {
-    background-color: #1e293b !important;
-    /* Solid background for a clean clipping mask */
+    background-color: #0f172a !important;
+    /* Darker header background */
     opacity: 1 !important;
-    color: var(--text-muted);
+    color: var(--text-main);
+    /* High contrast white text */
     font-weight: 700;
     text-align: left;
     padding: 14px 20px;
@@ -862,9 +865,8 @@ input:checked+.slider:before {
 }
 
 .project-table th:hover {
-    background-color: #1a1a24 !important;
-    /* Solid color to prevent transparency */
-    color: white;
+    background-color: #1e293b !important;
+    color: var(--primary);
 }
 
 .project-table tbody tr {
@@ -1505,21 +1507,24 @@ th:has(.resizing) {
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.02em;
-    background: rgba(59, 130, 246, 0.1);
+    background: rgba(96, 165, 250, 0.2);
+    /* Increased opacity */
     color: var(--primary);
-    border: 1px solid rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(96, 165, 250, 0.4);
 }
 
 .status-badge.new {
-    background: rgba(16, 185, 129, 0.1);
-    color: #10b981;
-    border-color: rgba(16, 185, 129, 0.2);
+    background: rgba(16, 185, 129, 0.25);
+    color: #34d399;
+    /* Brighter Emerald */
+    border-color: rgba(16, 185, 129, 0.5);
 }
 
 .status-badge.update {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
-    border-color: rgba(239, 68, 68, 0.2);
+    background: rgba(239, 68, 68, 0.25);
+    color: #f87171;
+    /* Brighter Red */
+    border-color: rgba(239, 68, 68, 0.5);
 }
 
 /* Modal Styles */
