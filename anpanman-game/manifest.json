@@ -1,0 +1,17 @@
+{
+  "name": "アンパンマン・ボールポップ",
+  "short_name": "アンパンマン",
+  "description": "アンパンマンのボール割りゲーム",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#e0f7fa",
+  "theme_color": "#ff5252",
+  "icons": [
+    {
+      "src": "public/assets/anpanman.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

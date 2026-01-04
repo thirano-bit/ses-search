@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>アンパンマン・ボールポップ</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js');
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+
+        <!-- Menu Screen -->
+        <div id="menu-screen" class="overlay">
+            <h1 class="game-title">アンパンマン<br>ボールポップ！</h1>
+            <div class="menu-buttons">
+                <button id="normal-mode-btn" class="menu-btn">
+                    <span class="btn-text">いつものモード</span>
+                    <span class="btn-desc">たくさん割って遊ぼう！</span>
+                </button>
+                <button id="color-mode-btn" class="menu-btn secondary">
+                    <span class="btn-text">いろあてモード</span>
+                    <span class="btn-desc">おなじ色をさがそう！</span>
+                </button>
+            </div>
+        </div>
+
+        <button id="fullscreen-btn">ぜんがめん</button>
+
+        <!-- In-game Controls -->
+        <div id="game-controls" class="hidden">
+            <button id="restart-btn" class="ctrl-btn">はじめから</button>
+            <button id="exit-btn" class="ctrl-btn secondary">メニューへ</button>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+
+</html>

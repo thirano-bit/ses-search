@@ -1,0 +1,53 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" >
+<meta name="description" content="" >
+<meta name="keywords" content="" >
+<title>エラー（404）</title>
+<link rel="icon" type="image/x-icon" href="https://otologic.jp/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="https://otologic.jp/images/favicon192.png"><link rel="icon" type="image/svg+xml" href="https://otologic.jp/images/favicon.svg">
+<link rel="stylesheet" href="https://otologic.jp/css/base20250128-min.css" type="text/css" >
+<link rel="stylesheet" href="https://otologic.jp/css/error20240616.css" type="text/css" >
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Kosugi&display=swap" rel="stylesheet">
+<!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-HF56YRGSGY"></script><script>  window.dataLayer = window.dataLayer || [];  function gtag(){dataLayer.push(arguments);}  gtag('js', new Date());  gtag('config', 'G-HF56YRGSGY');</script>
+<script src="https://otologic.jp/js/base20250125-min.js" defer></script>
+</head>
+<body>
+<div id="loading">
+	<span id="loading_yokosen"></span><!-- loading_yokosen -->
+</div><!-- loading -->
+<div id="header-bg">
+	<header>
+		<div class="logo">
+			<a href="https://otologic.jp/" aria-label="OtoLogic"><span class="icon-path180"></span><span class="icon-oto2"></span></a>
+		</div><!-- /#logo -->
+	</header>
+</div><!-- /#header-bg -->
+<div id="contents-bg">
+	<div id="contents">
+		<div id="mitei">
+			<p><span>404 Not Found</span><br><br>リクエスト先が存在しません。入力されたアドレスに誤りがあるか、<br>ページ・ファイルが移動もしくは削除された可能性があります。
+			<br><br>※正常な操作にも関わらずこちらのページが表示された場合、<br>管理者の設定不備やサーバー上でのデータ破損の場合があります。<br>お手数ですが<a href="https://otologic.jp/mail/contact.html">お問い合わせフォーム</a>よりご報告いただけますと幸いです。<br><br><a href="https://otologic.jp/">トップに戻る</a></p>
+		</div><!-- /#mitei -->
+	</div><!-- /#contents -->
+</div><!-- /#contents-bg -->
+<div id="footer-bg">
+	<footer>
+		<div class="fmenu">
+			<a href="https://otologic.jp/about/about_us.html">About</a>
+			<a href="https://otologic.jp/order/">制作依頼(停止中)</a>
+			<a href="https://otologic.jp/about/compliance.html">コンプライアンス</a><div class="jscrdeyareyo"><br></div>
+			<a href="https://otologic.jp/about/browse.html">閲覧にあたって</a>
+			<a href="https://otologic.jp/about/tokuteisho.html">特定商取引法</a><div class="jscrdeyareyo"><br></div>
+			<a href="https://otologic.jp/mail/contact.html">お問い合わせ</a>
+		</div><!-- /#fmenu -->
+		<div class="copyright">
+			<p>Copyright &copy; 2012-<span id="copy_year"></span> OtoLogic</p>
+		</div><!-- /#copyright -->
+	</footer>
+</div><!-- /#footer-bg -->
+<div id="page-top">
+	<a href="#top" class="page-top"><span class="topyazirusi"></span></a>
+</div><!-- /#page-top -->
+</body>
+</html>
