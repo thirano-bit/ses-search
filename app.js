@@ -399,7 +399,7 @@ const COLUMNS = {
                     <div class="title-main-group">
                         <div class="col-title-text">${titleHtml}</div>
                         <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px; margin-bottom: 12px;">
-                            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 400;">${escapeHtml(project.id)}</div>
+                            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 400;">${highlightText(project.id, document.getElementById('searchInput')?.value.trim())}</div>
                             <button class="copy-title-mini-btn" title="案件名コピー" data-title-copy="${escapeHtml(project.id)}｜${escapeHtml(project.title)}" onclick="copyTitleOnly(this, event)">
                                 <i class="fa-solid fa-copy"></i>
                             </button>
