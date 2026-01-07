@@ -1023,6 +1023,17 @@ input:checked+.slider:before {
     color: white;
 }
 
+.mini-mode-price {
+    display: none;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.mini-mode .mini-mode-price {
+    display: block;
+}
+
 /* Title Layout and Favorites */
 .title-container {
     display: flex;

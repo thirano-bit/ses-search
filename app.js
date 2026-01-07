@@ -403,6 +403,7 @@ const COLUMNS = {
                             <button class="copy-title-mini-btn" title="案件名コピー" data-title-copy="${escapeHtml(project.id)}｜${escapeHtml(project.title)}" onclick="copyTitleOnly(this, event)">
                                 <i class="fa-solid fa-copy"></i>
                             </button>
+                            <div class="mini-mode-price">${escapeHtml(project.price)}</div>
                         </div>
                     </div>
                     <button class="fav-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite('${escapeHtml(project.id)}', this, event)" title="お気に入り">
